@@ -1,0 +1,44 @@
+---
+- hosts: localhost
+  connection: local
+  gather_facts: False
+  tasks:
+    - name: example ec2 group
+      local_action:
+        module: ec2_group
+        name: logstash_server
+        description: security group for logstash_serer
+        region: eu-west-1
+        rules:
+          - proto: tcp
+            from_port: 22
+            to_port: 22
+            cidr_ip: 0.0.0.0/0
+
+    - name: Provision a vm in aws
+      local_action:
+        module: ec2
+        key_name: eu_aws
+        instance_type: t2.micro
+        group: logstash_server
+        image: ami-0307d674
+        wait: yes 
+        region: eu-west-1
+        instance_tags: 
+          logstash: server
+        exact_count: 1
+        count_tag: logstash
+      register: logstash
+
+    - debug: var=logstash
+
+    - name: Add all instance public IPs to host group
+      add_host: hostname={{ item.public_ip }} groupname=logstash
+      with_items: logstash.tagged_instances
+
+- hosts: logstash
+  remote_user: ubuntu
+  sudo: yes
+  tasks:
+    - name: Add the oracle java apt_repository
+      apt_repository: repo='deb http://ppa.launchpad.net/webupd8team/java/ubuntu precise main' state=present
